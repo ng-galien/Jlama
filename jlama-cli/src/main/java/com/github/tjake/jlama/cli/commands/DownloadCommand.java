@@ -17,10 +17,9 @@ package com.github.tjake.jlama.cli.commands;
 
 import com.github.tjake.jlama.cli.JlamaCli;
 import java.io.File;
-import picocli.CommandLine;
+import java.util.List;
 
-import static com.github.tjake.jlama.cli.commands.SimpleBaseCommand.getName;
-import static com.github.tjake.jlama.cli.commands.SimpleBaseCommand.getOwner;
+import picocli.CommandLine;
 
 @CommandLine.Command(name = "download", description = "Downloads a HuggingFace model - use owner/name format", abbreviateSynopsis = true)
 public class DownloadCommand extends JlamaCli {
@@ -41,9 +40,8 @@ public class DownloadCommand extends JlamaCli {
 
     @Override
     public void run() {
-        String owner = getOwner(modelName);
-        String name = getName(modelName);
+        ModelId model = JlamaCli.resolveModelName(modelName, List::of);
 
-        SimpleBaseCommand.downloadModel(owner, name, modelDirectory, branch, authToken, true);
+        SimpleBaseCommand.downloadModel(model, modelDirectory, branch, authToken, true);
     }
 }

@@ -15,6 +15,7 @@
  */
 package com.github.tjake.jlama.cli.commands;
 
+import com.github.tjake.jlama.cli.JlamaCli;
 import com.github.tjake.jlama.net.Coordinator;
 import com.github.tjake.jlama.net.Worker;
 import com.github.tjake.jlama.safetensors.DType;
@@ -91,11 +92,11 @@ public class ClusterCoordinatorCommand extends ModelBaseCommand implements WebMv
                 downloadSection.authToken,
                 false
             );
-
+            ModelId modelId = resolveModelName(modelName, () -> listLocalModels(modelDirectory));
             Coordinator c = new Coordinator(
                 model.toFile(),
-                SimpleBaseCommand.getOwner(modelName),
-                SimpleBaseCommand.getName(modelName),
+                modelId.owner(),
+                modelId.name(),
                 modelType,
                 workingDirectory,
                 grpcPort,
@@ -120,8 +121,8 @@ public class ClusterCoordinatorCommand extends ModelBaseCommand implements WebMv
             if (includeWorker) {
                 Worker w = new Worker(
                     model.toFile(),
-                    SimpleBaseCommand.getOwner(modelName),
-                    SimpleBaseCommand.getName(modelName),
+                    modelId.owner(),
+                    modelId.name(),
                     modelType,
                     "localhost",
                     grpcPort,

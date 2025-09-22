@@ -42,7 +42,7 @@ public class SimpleBaseCommand extends JlamaCli {
         "--model-cache" }, paramLabel = "ARG", description = "The local directory for downloaded models (default: ${DEFAULT-VALUE})")
     protected File modelDirectory = new File(JlamaCli.DEFAULT_MODEL_DIRECTORY);
 
-    @CommandLine.Parameters(index = "0", arity = "1", paramLabel = "<model name>", description = "The huggingface model owner/name pair")
+    @CommandLine.Parameters(index = "0", arity = "1", paramLabel = "<model name|index>", description = "The huggingface model owner/name pair or numeric index from 'jlama list'")
     protected String modelName;
 
     static class DownloadSection {
@@ -58,22 +58,49 @@ public class SimpleBaseCommand extends JlamaCli {
         String authToken = null;
     }
 
-    static String getOwner(String modelName) {
-        String[] parts = modelName.split("/");
-        if (parts.length == 0 || parts.length > 2) {
+    // Validation d'un nom owner/name
+    private static String[] parseModelName(String modelName) {
+        if (modelName == null) {
+            System.err.println("Model name must be in the form owner/name (was null)");
+            System.exit(1);
+        }
+        int slash = modelName.indexOf('/');
+        if (slash <= 0 || slash == modelName.length() - 1 || modelName.indexOf('/', slash + 1) != -1) {
             System.err.println("Model name must be in the form owner/name");
             System.exit(1);
         }
-        return parts[0];
+        return new String[]{modelName.substring(0, slash), modelName.substring(slash + 1)};
     }
 
-    static String getName(String modelName) {
-        String[] parts = modelName.split("/");
-        if (parts.length != 2) {
-            System.err.println("Model name must be in the form owner/name");
+    static String getOwner(String modelName) { return parseModelName(modelName)[0]; }
+    static String getName(String modelName) { return parseModelName(modelName)[1]; }
+
+    // Wrapper public pour compatibilité vers nouvelle résolution centrale
+    public static String resolveModelName(String input, File modelDirectory) {
+        ModelId id = JlamaCli.resolveModelName(input, () -> JlamaCli.listLocalModels(modelDirectory));
+        return id.fullName();
+    }
+
+    // Overload conservant l'ancienne signature
+    static void downloadModel(String owner, String name, File modelDirectory, String branch, String authToken, boolean downloadWeights) {
+        downloadModel(new ModelId(owner, name), modelDirectory, branch, authToken, downloadWeights);
+    }
+
+    static void downloadModel(ModelId modelId, File modelDirectory, String branch, String authToken, boolean downloadWeights) {
+        try {
+            SafeTensorSupport.maybeDownloadModel(
+                modelDirectory.getAbsolutePath(),
+                Optional.of(modelId.owner()),
+                modelId.name(),
+                downloadWeights,
+                Optional.ofNullable(URLEncoder.encode(branch, "UTF-8")),
+                Optional.ofNullable(authToken),
+                getProgressConsumer()
+            );
+        } catch (IOException e) {
+            e.printStackTrace();
             System.exit(1);
         }
-        return parts[1];
     }
 
     static Optional<ProgressReporter> getProgressConsumer() {
@@ -101,23 +128,6 @@ public class SimpleBaseCommand extends JlamaCli {
         });
     }
 
-    static void downloadModel(String owner, String name, File modelDirectory, String branch, String authToken, boolean downloadWeights) {
-        try {
-            SafeTensorSupport.maybeDownloadModel(
-                modelDirectory.getAbsolutePath(),
-                Optional.ofNullable(owner),
-                name,
-                downloadWeights,
-                Optional.ofNullable(URLEncoder.encode(branch, "UTF-8")),
-                Optional.ofNullable(authToken),
-                getProgressConsumer()
-            );
-        } catch (IOException e) {
-            e.printStackTrace();
-            System.exit(1);
-        }
-    }
-
     static Path getModel(String modelName, File modelDirectory, boolean autoDownload, String branch, String authToken) {
         return getModel(modelName, modelDirectory, autoDownload, branch, authToken, true);
     }
@@ -130,19 +140,16 @@ public class SimpleBaseCommand extends JlamaCli {
         String authToken,
         boolean downloadWeights
     ) {
-        String owner = getOwner(modelName);
-        String name = getName(modelName);
-
-        Path modelPath = SafeTensorSupport.constructLocalModelPath(modelDirectory.getAbsolutePath(), owner, name);
+        ModelId mn = JlamaCli.resolveModelName(modelName, () -> JlamaCli.listLocalModels(modelDirectory));
+        Path modelPath = SafeTensorSupport.constructLocalModelPath(modelDirectory.getAbsolutePath(), mn.owner(), mn.name());
 
         if (autoDownload) {
-            downloadModel(owner, name, modelDirectory, branch, authToken, downloadWeights);
+            downloadModel(mn, modelDirectory, branch, authToken, downloadWeights);
         } else if (!modelPath.toFile().exists()) {
             System.err.println("Model not found: " + modelPath);
             System.err.println("Use --auto-download to download the model");
             System.exit(1);
         }
-
         return modelPath;
     }
 }

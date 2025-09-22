@@ -16,13 +16,10 @@
 package com.github.tjake.jlama.cli.commands;
 
 import com.github.tjake.jlama.cli.JlamaCli;
-import com.github.tjake.jlama.model.ModelSupport;
-import com.github.tjake.jlama.safetensors.SafeTensorSupport;
 import picocli.CommandLine;
 
 import java.io.File;
-import java.io.IOException;
-import java.util.Objects;
+import java.util.List;
 
 @CommandLine.Command(name = "list", description = "Lists local models", abbreviateSynopsis = true)
 public class ListCommand extends JlamaCli {
@@ -36,40 +33,15 @@ public class ListCommand extends JlamaCli {
             System.out.println("No models found in " + modelDirectory.getAbsolutePath());
             System.exit(0);
         }
-
-        File[] files = modelDirectory.listFiles();
-        if (files == null || files.length == 0) {
+        List<ModelId> models = listLocalModels(modelDirectory);
+        if (models.isEmpty()) {
             System.out.println("No models found in " + modelDirectory.getAbsolutePath());
             System.exit(0);
         }
         int idx = 1;
-        for (File file : files) {
-            if (file.isDirectory()) {
-                String[] parts = file.getName().split("_");
-                if (parts.length == 2) {
-
-                    File baseDir = file;
-                    File configFile = null;
-                    for (File f : Objects.requireNonNull(baseDir.listFiles())) {
-                        if (f.getName().equals("config.json")) {
-                            configFile = f;
-                            break;
-                        }
-                    }
-
-                    if (configFile != null) {
-                        ModelSupport.ModelType modelType = null;
-                        try {
-                            modelType = SafeTensorSupport.detectModel(configFile);
-                        } catch (IOException | IllegalArgumentException e) {
-                            // ignore Unknown model type
-                        }
-                        if (modelType != null) {
-                            System.out.println(idx++ + ": " + parts[0] + "/" + parts[1]);
-                        }
-                    }
-                }
-            }
+        for (ModelId m : models) {
+            System.out.println(idx++ + ": " + m.fullName());
         }
+        System.out.println("\nYou can reference a model by its number in other commands (e.g. 'jlama chat 1').");
     }
 }

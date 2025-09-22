@@ -28,6 +28,8 @@ import picocli.CommandLine.*;
 
 import java.util.*;
 import java.io.File;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static java.util.Arrays.asList;
 import static picocli.CommandLine.Help.Column.Overflow.*;
@@ -214,5 +216,88 @@ public class JlamaCli implements Runnable {
         } else {
             return defaultHome;
         }
+    }
+
+
+    /**
+     * Represents a model identifier consisting of an owner and a model name.
+     *
+     * Provides validation and utility methods for parsing and formatting.
+     */
+    public record ModelId(String owner, String name) {
+        public ModelId {
+            if (owner == null || owner.isEmpty() || name == null || name.isEmpty()) {
+                throw new IllegalArgumentException("Owner and name must be non-empty");
+            }
+        }
+
+        public String fullName() {
+            return owner + "/" + name;
+        }
+
+    }
+
+    /**
+     * Lists all locally cached models in the given model directory.
+     * A valid model is a directory named "owner_name" containing a config.json file.
+     * The returned list is sorted alphabetically by "owner/name".
+     *
+     * @param modelDirectory The directory to search for models.
+     * @return A list of model names in the form "owner/name".
+     */
+    public static List<ModelId> listLocalModels(File modelDirectory) {
+        List<ModelId> out = new ArrayList<>();
+        if (!modelDirectory.exists()) return out;
+        File[] files = modelDirectory.listFiles();
+        if (files == null) return out;
+        for (File file : files) {
+            if (!file.isDirectory()) continue;
+            String[] parts = file.getName().split("_");
+            if (parts.length != 2) continue;
+            File configFile = new File(file, "config.json");
+            if (configFile.exists()) {
+                try {
+                    if (com.github.tjake.jlama.safetensors.SafeTensorSupport.detectModel(configFile) != null) {
+                        out.add(new ModelId(parts[0], parts[1]));
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+        out.sort(Comparator.comparing(ModelId::fullName));
+        return out;
+    }
+
+    /**
+     * Resolves a model name from either an "owner/name" string or a 1-based index
+     * into the list of locally cached models.
+     *
+     * @param modelName      The model identifier, either "owner/name" or a numeric index as a string.
+     * @param findExisting   A supplier that returns the current list of locally cached models.
+     * @return The resolved ModelName.
+     * @throws IllegalArgumentException if the model identifier is invalid or not found.
+     */
+    protected static ModelId resolveModelName(String modelName, Supplier<List<ModelId>> findExisting) {
+        Function<String, Optional<ModelId>> tryFromIndex = name -> {
+            try {
+                int index = Integer.parseInt(name);
+                List<ModelId> localModels = findExisting.get();
+                if (index <= 0 || index > localModels.size()) {
+                    return Optional.empty();
+                }
+                return Optional.of(localModels.get(index - 1));
+            } catch (NumberFormatException e) {
+                return Optional.empty();
+            }
+        };
+        Supplier<Optional<ModelId>> tryFromName = () -> Optional.ofNullable(modelName)
+            .map(m -> m.split("/"))
+            .filter(parts -> parts.length == 2)
+            .filter(parts -> !parts[0].isEmpty() && !parts[1].isEmpty())
+            .map(parts -> new ModelId(parts[0], parts[1]));
+        return Optional.ofNullable(modelName)
+            .flatMap(tryFromIndex)
+            .or(tryFromName)
+            .orElseThrow(() -> new IllegalArgumentException("Invalid model identifier: " + modelName
+                + ". Provide owner/name or numeric index from 'jlama list'."));
     }
 }

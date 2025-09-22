@@ -18,6 +18,7 @@ package com.github.tjake.jlama.cli.commands;
 import com.github.tjake.jlama.net.Worker;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import com.github.tjake.jlama.safetensors.DType;
@@ -63,10 +64,11 @@ public class ClusterWorkerCommand extends BaseCommand {
                 PhysicalCoreExecutor.overrideThreadCount(this.advancedSection.threadCount);
             }
 
+            ModelId modelId = SimpleBaseCommand.resolveModelName(modelName, List::of);
             Worker w = new Worker(
                 model.toFile(),
-                SimpleBaseCommand.getOwner(modelName),
-                SimpleBaseCommand.getName(modelName),
+                modelId.owner(),
+                modelId.name(),
                 modelType,
                 host,
                 grpcPort,

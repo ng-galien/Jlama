@@ -33,15 +33,15 @@ public class RemoveCommand extends JlamaCli {
         "--model-cache" }, paramLabel = "ARG", description = "The local directory for all downloaded models (default: ${DEFAULT-VALUE})")
     protected File modelDirectory = new File(JlamaCli.DEFAULT_MODEL_DIRECTORY);
 
-    @CommandLine.Parameters(index = "0", arity = "1", paramLabel = "<model name>", description = "The huggingface model owner/name pair")
+    @CommandLine.Parameters(index = "0", arity = "1", paramLabel = "<model name|index>", description = "Model owner/name or numeric index from 'jlama list'")
     protected String modelName;
 
     @Override
     public void run() {
-        String owner = SimpleBaseCommand.getOwner(modelName);
-        String name = SimpleBaseCommand.getName(modelName);
+        ModelId resolved = JlamaCli.resolveModelName(modelName, () -> listLocalModels(modelDirectory));
 
-        Path modelPath = SafeTensorSupport.constructLocalModelPath(modelDirectory.getAbsolutePath(), owner, name);
+        Path modelPath = SafeTensorSupport.constructLocalModelPath(modelDirectory.getAbsolutePath(),
+            resolved.owner(), resolved.name());
 
         if (!modelPath.toFile().exists()) {
             System.err.println("Model not found: " + modelPath);
